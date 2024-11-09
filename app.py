@@ -28,7 +28,7 @@ with st.form("my_form"):
         'short & sweet',
         'highly-detailed [premium]',
         'old english',
-        'in latin'
+        'Latin'
     ])
     send_button = st.form_submit_button('Get My Summary')
 
