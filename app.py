@@ -1,6 +1,42 @@
 import streamlit as st
-from utilities import send_req_to_server, get_result
+import requests
 from streamlit_autorefresh import st_autorefresh
+
+
+def get_result(task_id: str):
+    try:
+        # Send the GET request to the server
+        response = requests.get(f'http://127.0.0.1:8000/task/{task_id}')
+        response.raise_for_status()  # Raises an HTTPError for bad responses
+
+        # Parse the response JSON
+        summary = response.json()
+        print(summary)
+        return summary
+
+    except requests.exceptions.RequestException as e:
+        # Handle network-related errors gracefully
+        st.error(f"Request error: {e}")
+        return {"status": "UNKNOWN", "error": str(e)}
+    except ValueError as e:
+        # Handle JSON decoding errors
+        st.error(f"Error parsing response: {e}")
+        return {"status": "UNKNOWN", "error": str(e)}
+
+def send_req_to_server(url, summary_type, **kwargs):
+    st.write(f'URL is {url}, and summary type is {summary_type}')
+
+    data = {"url": url, "detail_level": summary_type}
+
+    # TODO: Update the URL to your deployed FastAPI server
+    try:
+        response = requests.post('http://127.0.0.1:8000/start-download', json=data)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Request error: {e}")
+        return {"status": "FAILED", "error": str(e)}
+
 
 st.title("Free YouTube to AI Summary")
 
@@ -34,18 +70,19 @@ with st.form("my_form"):
 
 # Start the task
 if send_button:
-    response = send_req_to_server(url, summary_type)
-    if response and 'task_id' in response:
-        print(f"in send button if statement: {response}")
-        st.session_state.task_id = response['task_id']
-        st.session_state.polling = True
-        st.session_state.task_status = 'pending'
-        st.session_state.summary = None
-        st.session_state.error = None
-        st.write("Task started. Task ID:", st.session_state.task_id)
-    else:
-        st.error("Failed to start task.")
-        st.write(response)
+    with st.spinner("Sending Request to OpenAI... please be patient."):
+        response = send_req_to_server(url, summary_type)
+        if response and 'task_id' in response:
+            print(f"in send button if statement: {response}")
+            st.session_state.task_id = response['task_id']
+            st.session_state.polling = True
+            st.session_state.task_status = 'pending'
+            st.session_state.summary = None
+            st.session_state.error = None
+            st.write("Task started. Task ID:", st.session_state.task_id)
+        else:
+            st.error("Failed to start task.")
+            st.write(response)
 
 # Polling mechanism
 if st.session_state.polling and st.session_state.task_id:
@@ -71,7 +108,7 @@ if st.session_state.polling and st.session_state.task_id:
 # Display the result or status message outside the polling block
 if st.session_state.task_status == 'completed':
     st.success("Task completed!")
-    st.write("Summary:", st.session_state.summary)
+    st.markdown("Summary:", st.session_state.summary)
 elif st.session_state.task_status == 'failed':
     st.error("Task failed.")
     st.write("Error:", st.session_state.error)
